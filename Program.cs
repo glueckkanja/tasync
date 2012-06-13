@@ -24,7 +24,7 @@ namespace Tasync
             {
                 Console.WriteLine("Invalid arguments");
                 Console.WriteLine(e.Message);
-                Console.WriteLine("Try 'tysync --help'.");
+                Console.WriteLine("Try 'tasync --help'.");
                 return 1;
             }
 
