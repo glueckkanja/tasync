@@ -37,12 +37,24 @@ namespace Tasync
             ctx.IgnoreMissingProperties = true;
             ctx.ReadingEntity += GenericEntity.OnReadingEntity;
 
-            GenericEntity[] data = ctx.CreateQuery<GenericEntity>(table)
-                .AsTableServiceQuery(ctx)
-                .ToArray()
-                .OrderBy(x => x.PartitionKey)
-                .ThenBy(x => x.RowKey)
-                .ToArray();
+            TableContinuationToken token = null;
+
+            var data = new List<GenericEntity>();
+
+            do
+            {
+                TableQuerySegment<GenericEntity> segment = ctx.CreateQuery<GenericEntity>(table)
+                    .AsTableServiceQuery(ctx)
+                    .ExecuteSegmented(token);
+
+                data.AddRange(segment);
+
+                Console.WriteLine("   ... total loaded {0:#######}", data.Count);
+
+                token = segment.ContinuationToken;
+            } while (token != null);
+
+            data = data.OrderBy(x => x.PartitionKey).ThenBy(x => x.RowKey).ToList();
 
             using (FileStream file = File.OpenWrite(BuildFilePath(table)))
             {
