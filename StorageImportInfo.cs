@@ -3,19 +3,20 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.WindowsAzure;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Tasync
 {
     internal class StorageImportInfo : StorageInfoBase
     {
-        public StorageImportInfo(StorageCredentialsAccountAndKey credentials, string path) : base(credentials, path)
+        public StorageImportInfo(StorageCredentials credentials, string path) : base(credentials, path)
         {
         }
 
         protected override void LoadTables()
         {
-            Task<string[]> destinationTables = Task.Factory.StartNew(() => Client.ListTables().ToArray());
+            Task<CloudTable[]> destinationTables = Task.Factory.StartNew(() => Client.ListTables().ToArray());
 
             SourceTables = Directory
                 .EnumerateFiles(Path, FilePrefix + @"*.json")
@@ -23,7 +24,7 @@ namespace Tasync
                 .Select(x => x.Substring(FilePrefix.Length))
                 .ToArray();
 
-            DestinationTables = destinationTables.Result;
+            DestinationTables = destinationTables.Result.Select(x => x.Name).ToArray();
         }
     }
 }

@@ -1,20 +1,17 @@
 using System;
 using System.Collections.Generic;
-using System.Data.Services.Client;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Xml;
-using System.Xml.Linq;
-using Microsoft.WindowsAzure;
-using Microsoft.WindowsAzure.StorageClient;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Table;
+using Microsoft.WindowsAzure.Storage.Table.DataServices;
 using Newtonsoft.Json;
 
 namespace Tasync
 {
     internal class StorageExport : StorageSyncBase
     {
-        public StorageExport(StorageCredentialsAccountAndKey credentials, string root, StorageInfoBase info)
+        public StorageExport(StorageCredentials credentials, string root, StorageInfoBase info)
             : base(credentials, root, info)
         {
         }
@@ -35,13 +32,13 @@ namespace Tasync
         {
             Console.WriteLine("## DATA SYNC       {0}", table);
 
-            TableServiceContext ctx = Client.GetDataServiceContext();
+            TableServiceContext ctx = Client.GetTableServiceContext();
 
             ctx.IgnoreMissingProperties = true;
             ctx.ReadingEntity += GenericEntity.OnReadingEntity;
 
             GenericEntity[] data = ctx.CreateQuery<GenericEntity>(table)
-                .AsTableServiceQuery()
+                .AsTableServiceQuery(ctx)
                 .ToArray()
                 .OrderBy(x => x.PartitionKey)
                 .ThenBy(x => x.RowKey)

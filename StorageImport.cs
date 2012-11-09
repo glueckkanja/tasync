@@ -3,15 +3,15 @@ using System;
 using System.Data.Services.Client;
 using System.IO;
 using System.Linq;
-using Microsoft.WindowsAzure;
-using Microsoft.WindowsAzure.StorageClient;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Table.DataServices;
 using Newtonsoft.Json;
 
 namespace Tasync
 {
     internal class StorageImport : StorageSyncBase
     {
-        public StorageImport(StorageCredentialsAccountAndKey credentials, string root, StorageInfoBase info)
+        public StorageImport(StorageCredentials credentials, string root, StorageInfoBase info)
             : base(credentials, root, info)
         {
         }
@@ -19,13 +19,13 @@ namespace Tasync
         protected override void CreateTable(string table)
         {
             Console.WriteLine("## TABLE CREATE    {0}", table);
-            Client.CreateTableIfNotExist(table);
+            Client.GetTableReference(table).CreateIfNotExists();
         }
 
         protected override void DeleteTable(string table)
         {
             Console.WriteLine("## TABLE DELETE    {0}", table);
-            Client.DeleteTableIfExist(table);
+            Client.GetTableReference(table).DeleteIfExists();
         }
 
         protected override void SyncData(string table)
@@ -45,7 +45,7 @@ namespace Tasync
             // insert or replace (AttachTo, UpdateObject, ReplaceOnUpdate)
             foreach (var batch in batches)
             {
-                TableServiceContext ctx = Client.GetDataServiceContext();
+                TableServiceContext ctx = Client.GetTableServiceContext();
                 ctx.ReadingEntity += GenericEntity.OnReadingEntity;
                 ctx.WritingEntity += GenericEntity.OnWritingEntity;
 

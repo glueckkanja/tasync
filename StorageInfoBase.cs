@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.WindowsAzure;
-using Microsoft.WindowsAzure.StorageClient;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Tasync
 {
@@ -10,7 +11,7 @@ namespace Tasync
     {
         protected const string FilePrefix = @"Table_";
 
-        public StorageInfoBase(StorageCredentialsAccountAndKey credentials, string path)
+        public StorageInfoBase(StorageCredentials credentials, string path)
         {
             Path = path;
             Client = new CloudStorageAccount(credentials, true).CreateCloudTableClient();

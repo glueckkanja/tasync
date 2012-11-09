@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.WindowsAzure;
-using Microsoft.WindowsAzure.StorageClient;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Tasync
 {
@@ -11,7 +12,7 @@ namespace Tasync
     {
         private const string FilePrefix = @"Table_";
 
-        public StorageSyncBase(StorageCredentialsAccountAndKey credentials, string root, StorageInfoBase info)
+        public StorageSyncBase(StorageCredentials credentials, string root, StorageInfoBase info)
         {
             Root = root;
             Info = info;

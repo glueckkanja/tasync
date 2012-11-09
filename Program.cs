@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.WindowsAzure;
+using Microsoft.WindowsAzure.Storage.Auth;
 using Mono.Options;
 
 namespace Tasync
@@ -62,7 +62,7 @@ namespace Tasync
 
         private static int MainExec(SyncMode mode, string path, Dictionary<string, object> cmd)
         {
-            var credentials = (StorageCredentialsAccountAndKey) cmd["credentials"];
+            var credentials = (StorageCredentials) cmd["credentials"];
 
             Console.WriteLine();
             Console.WriteLine("## ACTION     {0} {1}", mode, credentials.AccountName);
@@ -127,10 +127,10 @@ namespace Tasync
             return "";
         }
 
-        private static StorageCredentialsAccountAndKey ParseCred(string str)
+        private static StorageCredentials ParseCred(string str)
         {
             string[] arr = str.Split('|').Take(2).ToArray();
-            return new StorageCredentialsAccountAndKey(arr[0], arr[1]);
+            return new StorageCredentials(arr[0], arr[1]);
         }
 
         private static void ShowHelp(OptionSet p)
