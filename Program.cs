@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Auth;
 using Mono.Options;
 
@@ -9,41 +11,35 @@ namespace Tasync
 {
     internal static class Program
     {
+        private static readonly CancellationTokenSource Ctc = new CancellationTokenSource();
+
         private static int Main(string[] args)
         {
+            Console.CancelKeyPress += (_, e) =>
+                                          {
+                                              e.Cancel = true;
+                                              Ctc.Cancel();
+                                          };
+
             var cmd = new Dictionary<string, object>();
 
             var p = new OptionSet
                         {
                             {
-                                "c=|cred=", "credentials (account|key)",
-                                s => cmd["credentials"] = ParseCred(s)
-                                },
-                            {"h|help", "show this message and exit", s => cmd["help"] = s}
+                                "s=|src=|source=", "source account credentials (account|key) or 'dev'",
+                                s => cmd["source"] = ParseAccount(s)
+                            },
+                            {
+                                "d=|dst=|destination=", "destination account credentials (account|key) or 'dev'",
+                                s => cmd["destination"] = ParseAccount(s)
+                            },
+                            {
+                                "h|help", "show this message and exit",
+                                s => cmd["help"] = s
+                            }
                         };
 
-            SyncMode mode;
-            string path;
-
-            try
-            {
-                IList<string> extra = p.Parse(args);
-
-                mode = (extra[0].IndexOf("im", StringComparison.InvariantCultureIgnoreCase) >= 0)
-                           ? SyncMode.Import
-                           : SyncMode.Export;
-
-                path = Path.GetFullPath(extra[1]);
-
-                Directory.CreateDirectory(path);
-            }
-            catch (Exception e)
-            {
-                Console.Error.WriteLine("Invalid arguments");
-                Console.Error.WriteLine(e);
-                Console.Error.WriteLine("Try 'tasync --help'.");
-                return 1;
-            }
+            p.Parse(args);
 
             if (cmd.ContainsKey("help"))
             {
@@ -51,105 +47,65 @@ namespace Tasync
                 return 0;
             }
 
-            if (cmd.ContainsKey("credentials"))
+            if (cmd.ContainsKey("source") && cmd.ContainsKey("destination"))
             {
-                return MainExec(mode, path, cmd);
+                var src = (CloudStorageAccount) cmd["source"];
+                var dst = (CloudStorageAccount) cmd["destination"];
+
+                return MainExec(src, dst).Result;
             }
 
             ShowHelp(p);
             return 0;
         }
 
-        private static int MainExec(SyncMode mode, string path, Dictionary<string, object> cmd)
+        private static async Task<int> MainExec(CloudStorageAccount source, CloudStorageAccount destination)
         {
-            var credentials = (StorageCredentials) cmd["credentials"];
+            Exception ex = null;
 
-            Console.WriteLine();
-            Console.WriteLine("## ACTION     {0} {1}", mode, credentials.AccountName);
-            Console.WriteLine();
-            Console.WriteLine("   Scanning account ...");
-            Console.WriteLine();
-
-            StorageInfoBase info = (mode == SyncMode.Import)
-                                       ? (StorageInfoBase) new StorageImportInfo(credentials, path)
-                                       : new StorageExportInfo(credentials, path);
+            var syncer = new Syncer(source, destination, Ctc.Token);
 
             try
             {
-                info.LoadMetaData();
+                await syncer.Execute();
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine("Error loading table meta data");
-                Console.Error.WriteLine(e);
-                return 2;
+                ex = e;
             }
 
-            foreach (var kv in info.DestinationTableLevelActions.OrderBy(x => x.Key))
+            if (Ctc.IsCancellationRequested)
             {
-                Console.WriteLine("## {0,-10} {1}", ActionToString(kv.Value), kv.Key);
+                Console.WriteLine("User cancelled");
+                return 1;
             }
 
-            Console.WriteLine();
-
-            StorageSyncBase sync = null;
-
-            if (mode == SyncMode.Export)
+            if (ex != null)
             {
-                sync = new StorageExport(credentials, path, info);
-            }
-            else if (mode == SyncMode.Import)
-            {
-                sync = new StorageImport(credentials, path, info);
-            }
-
-            if (sync != null)
-            {
-                sync.RunTableLevelActions();
-                sync.RunDataLevelActions();
+                Console.Error.WriteLine("General error");
+                Console.Error.WriteLine(ex);
+                return 100;
             }
 
             return 0;
         }
 
-        private static string ActionToString(TableAction action)
+        private static CloudStorageAccount ParseAccount(string str)
         {
-            switch (action)
-            {
-                case TableAction.CreateTable:
-                    return "CREATE";
-                case TableAction.DeleteTable:
-                    return "DELETE";
-                case TableAction.SyncData:
-                    return "SYNC";
-            }
+            if ("dev".Equals(str, StringComparison.OrdinalIgnoreCase))
+                return CloudStorageAccount.DevelopmentStorageAccount;
 
-            return "";
-        }
-
-        private static StorageCredentials ParseCred(string str)
-        {
             string[] arr = str.Split('|').Take(2).ToArray();
-            return new StorageCredentials(arr[0], arr[1]);
+            return new CloudStorageAccount(new StorageCredentials(arr[0], arr[1]), true);
         }
 
         private static void ShowHelp(OptionSet p)
         {
             Console.WriteLine("tasync");
-            Console.WriteLine("Export, sync and import whole Azure Table Storage accounts.");
+            Console.WriteLine("Incrementally sync complete Azure Table Storage accounts.");
             Console.WriteLine();
 
             p.WriteOptionDescriptions(Console.Out);
         }
-
-        #region Nested type: SyncMode
-
-        private enum SyncMode
-        {
-            Export,
-            Import
-        }
-
-        #endregion
     }
 }
