@@ -27,12 +27,79 @@ namespace Tasync
             _dstClient = destination.CreateCloudTableClient();
         }
 
-        public async Task Execute()
+        public async Task SyncOneWay()
         {
             await Prechecks();
             await GatherInfo();
             await DoSync();
             await SaveInfo();
+        }
+
+        public async Task DeleteInDestination()
+        {
+            Console.WriteLine("cleaning up destination");
+
+            Task<HashSet<Tuple<string, string, string>>> srcTask = LoadAllIds(_srcClient);
+            Task<HashSet<Tuple<string, string, string>>> dstTask = LoadAllIds(_dstClient);
+
+            await DeleteInDestination(await srcTask, await dstTask);
+        }
+
+        private async Task<HashSet<Tuple<string, string, string>>> LoadAllIds(CloudTableClient client)
+        {
+            var result = new HashSet<Tuple<string, string, string>>();
+
+            var query = new TableQuery<TableEntity> {SelectColumns = new List<string> {"PartitionKey", "RowKey"}};
+
+            foreach (var kv in _timestamps)
+            {
+                CloudTable table = client.GetTableReference(kv.Key.Name);
+
+                IList<TableEntity> allFuckingEntities = await table.ExecuteQueryAsync(
+                    query, _token, list => Console.WriteLine("loaded {0} rows", list.Count));
+
+                foreach (TableEntity entity in allFuckingEntities)
+                {
+                    result.Add(Tuple.Create(table.Name, entity.PartitionKey, entity.RowKey));
+                }
+            }
+
+            return result;
+        }
+
+        private async Task DeleteInDestination(HashSet<Tuple<string, string, string>> src,
+                                               HashSet<Tuple<string, string, string>> dst)
+        {
+            dst.ExceptWith(src);
+
+            int n = 0;
+
+            // group by table + partition
+            foreach (var batch1 in dst.GroupBy(x => x.Item1 + x.Item2))
+            {
+                CloudTable dstTable = _dstClient.GetTableReference(batch1.First().Item1);
+
+                if (_token.IsCancellationRequested)
+                    return;
+
+                foreach (var batch2 in batch1.Batch(100))
+                {
+                    if (_token.IsCancellationRequested)
+                        return;
+
+                    var op = new TableBatchOperation();
+
+                    foreach (var tuple in batch2)
+                    {
+                        op.Delete(new TableEntity(tuple.Item2, tuple.Item3) {ETag = "*"});
+                    }
+
+                    await dstTable.ExecuteBatchAsync(op, _token);
+
+                    n += Math.Min(op.Count, 100);
+                    Console.WriteLine("deleted {0} rows", n);
+                }
+            }
         }
 
         private async Task Prechecks()

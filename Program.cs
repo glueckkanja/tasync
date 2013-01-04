@@ -26,12 +26,16 @@ namespace Tasync
             var p = new OptionSet
                         {
                             {
-                                "s=|src=|source=", "source account credentials (account|key) or 'dev'",
+                                "src=|source=", "source account credentials (account,key) or 'dev'",
                                 s => cmd["source"] = ParseAccount(s)
                             },
                             {
-                                "d=|dst=|destination=", "destination account credentials (account|key) or 'dev'",
+                                "dst=|destination=", "destination account credentials (account,key) or 'dev'",
                                 s => cmd["destination"] = ParseAccount(s)
+                            },
+                            {
+                                "d|delete", "delete in destination (defaults to off)",
+                                s => cmd["delete"] = s
                             },
                             {
                                 "h|help", "show this message and exit",
@@ -41,7 +45,7 @@ namespace Tasync
 
             p.Parse(args);
 
-            if (cmd.ContainsKey("help"))
+            if (cmd.ContainsKey("help") && cmd["help"] != null)
             {
                 ShowHelp(p);
                 return 0;
@@ -49,17 +53,19 @@ namespace Tasync
 
             if (cmd.ContainsKey("source") && cmd.ContainsKey("destination"))
             {
+                bool del = cmd.ContainsKey("delete") && cmd["delete"] != null;
+
                 var src = (CloudStorageAccount) cmd["source"];
                 var dst = (CloudStorageAccount) cmd["destination"];
 
-                return MainExec(src, dst).Result;
+                return MainExec(src, dst, del).Result;
             }
 
             ShowHelp(p);
             return 0;
         }
 
-        private static async Task<int> MainExec(CloudStorageAccount source, CloudStorageAccount destination)
+        private static async Task<int> MainExec(CloudStorageAccount source, CloudStorageAccount destination, bool delete)
         {
             Exception ex = null;
 
@@ -67,7 +73,12 @@ namespace Tasync
 
             try
             {
-                await syncer.Execute();
+                await syncer.SyncOneWay();
+                
+                if (delete)
+                {
+                    await syncer.DeleteInDestination();
+                }
             }
             catch (Exception e)
             {
@@ -95,7 +106,7 @@ namespace Tasync
             if ("dev".Equals(str, StringComparison.OrdinalIgnoreCase))
                 return CloudStorageAccount.DevelopmentStorageAccount;
 
-            string[] arr = str.Split('|').Take(2).ToArray();
+            string[] arr = str.Split(',').Take(2).ToArray();
             return new CloudStorageAccount(new StorageCredentials(arr[0], arr[1]), true);
         }
 
